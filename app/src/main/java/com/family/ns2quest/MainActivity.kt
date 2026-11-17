@@ -258,7 +258,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             } else {
                 // 全部通關！標記今日完成、啟動20分鐘計時器、切換到 HDMI 1
                 prefs.edit().putString("completed_date", getTodayString()).apply()
-                unlockHdmi1AndStartTimer(20)
+                unlockHdmi1AndStartTimer(22)
             }
         } else {
             Toast.makeText(this, "再聽一次發音想想看喔！💪", Toast.LENGTH_SHORT).show()
