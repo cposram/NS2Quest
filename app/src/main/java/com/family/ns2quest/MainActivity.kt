@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val optionButtons = mutableListOf<Button>()
 
     private val prefs by lazy { getSharedPreferences("ns2_quest_prefs", Context.MODE_PRIVATE) }
-    private val PARENT_PIN = "1234" // 家長預設密碼，可自行修改
+    private val PARENT_PIN = "0924" // 家長預設密碼，可自行修改
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
