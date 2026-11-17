@@ -19,7 +19,8 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
 
     companion object {
         const val CHANNEL_ID = "ns2_timer_channel"
-        const val EXTRA_MINUTES = "extra_minutes"
+        const val EXTRA_ACTUAL_MINUTES = "extra_actual_minutes"
+        const val EXTRA_DISPLAY_MINUTES = "extra_display_minutes"
         var remainingSeconds: Long = 0L
         var isRunning: Boolean = false
     }
@@ -38,12 +39,13 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val minutes = intent?.getIntExtra(EXTRA_MINUTES, 20) ?: 20
-        val totalMillis = minutes * 60 * 1000L
+        val actualMinutes = intent?.getIntExtra(EXTRA_ACTUAL_MINUTES, 23) ?: 23
+        val displayMinutes = intent?.getIntExtra(EXTRA_DISPLAY_MINUTES, 20) ?: 20
+        val totalMillis = actualMinutes * 60 * 1000L
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("NS2 遊玩計時中")
-            .setContentText("剩餘 $minutes 分鐘，時間到將自動鎖定螢幕")
+            .setContentTitle("NS2 勇者遊玩計時中")
+            .setContentText("本輪遊玩時間：$displayMinutes 分鐘（含連線緩衝）")
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setOngoing(true)
             .build()
@@ -57,10 +59,10 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
             override fun onTick(millisUntilFinished: Long) {
                 remainingSeconds = millisUntilFinished / 1000L
 
-                // 剩餘 1 分鐘（60秒）發出語音存檔提醒
+                // 僅在最後剩餘 1 分鐘（60秒）時提醒存檔
                 if (remainingSeconds == 60L && ttsReady) {
                     tts?.speak(
-                        "Attention! 1 minutes left. Please save your game now.",
+                        "One minute left. Please save your game now.",
                         TextToSpeech.QUEUE_FLUSH,
                         null,
                         "warn_1min"
@@ -81,7 +83,7 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
                     )
                 }
 
-                // 強制彈回 MainActivity，使 TCL 電視自動跳離 HDMI 1
+                // 強制彈回 MainActivity，將畫面拉離 HDMI 1
                 val lockIntent = Intent(this@TimerService, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     putExtra("TIME_UP", true)
