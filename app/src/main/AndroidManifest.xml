@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 支援 Google TV / Android TV 遙控器與桌面圖示 -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- 20分鐘時間到從 HDMI 1 自動彈回前景所需的關鍵權限 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -13,8 +11,8 @@
     <application
         android:allowBackup="true"
         android:label="NS2 勇者英語試煉"
-        android:banner="@android:drawable/sym_def_app_icon"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:banner="@drawable/custom_banner"
+        android:icon="@drawable/custom_icon"
         android:theme="@style/Theme.AppCompat.NoActionBar">
 
         <activity
