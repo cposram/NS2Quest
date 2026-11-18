@@ -31,7 +31,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val MINUTES_PER_QUESTION = 2   // 每答對 1 題獲得幾分鐘
     private val MAX_QUESTIONS = 20         // 每輪最多授權答對幾題（20題 = 40分鐘）
     private val BUFFER_MINUTES = 3         // 結算時額外贈送的隱藏連線緩衝分鐘數
-    private val PARENT_PIN = "1234"        // 家長重置與設定密碼
+    private val PARENT_PIN = "924"        // 家長重置與設定密碼
     // ==========================================
 
     private lateinit var tts: TextToSpeech
