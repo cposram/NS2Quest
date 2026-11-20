@@ -16,6 +16,10 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
     private var countDownTimer: CountDownTimer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var pendingAlertText: String? = null
+
+    private var halfTimeWarned = false
+    private var oneMinWarned = false
 
     companion object {
         const val CHANNEL_ID = "ns2_timer_channel"
@@ -35,6 +39,10 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
         if (status == TextToSpeech.SUCCESS) {
             tts?.language = Locale.US
             ttsReady = true
+            pendingAlertText?.let { msg ->
+                pendingAlertText = null
+                tts?.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "timer_alert_retry")
+            }
         }
     }
 
@@ -42,6 +50,12 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
         val actualMinutes = intent?.getIntExtra(EXTRA_ACTUAL_MINUTES, 23) ?: 23
         val displayMinutes = intent?.getIntExtra(EXTRA_DISPLAY_MINUTES, 20) ?: 20
         val totalMillis = actualMinutes * 60 * 1000L
+
+        // 計算「取得遊玩時間的一半」（例如取得 40 分鐘，剩餘 20 分鐘＝1200 秒時提醒換人）
+        val halfRemainingSeconds = (displayMinutes * 60L) / 2L
+
+        halfTimeWarned = false
+        oneMinWarned = false
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("NS2 勇者遊玩計時中")
@@ -59,14 +73,16 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
             override fun onTick(millisUntilFinished: Long) {
                 remainingSeconds = millisUntilFinished / 1000L
 
-                // 僅在最後剩餘 1 分鐘（60秒）時提醒存檔
-                if (remainingSeconds == 60L && ttsReady) {
-                    tts?.speak(
-                        "One minute left. Please save your game now.",
-                        TextToSpeech.QUEUE_FLUSH,
-                        null,
-                        "warn_1min"
-                    )
+                // 1. 剩餘一半時間時提醒換人（僅在總時間大於 3 分鐘、避免與最後 1 分鐘重疊時觸發）
+                if (!halfTimeWarned && halfRemainingSeconds > 90L && remainingSeconds <= halfRemainingSeconds) {
+                    halfTimeWarned = true
+                    speakAlert("Half time! Please switch players now.")
+                }
+
+                // 2. 最後剩餘 1 分鐘（60秒）提醒存檔
+                if (!oneMinWarned && remainingSeconds <= 60L) {
+                    oneMinWarned = true
+                    speakAlert("One minute left. Please save your game now.")
                 }
             }
 
@@ -74,14 +90,7 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
                 isRunning = false
                 remainingSeconds = 0L
 
-                if (ttsReady) {
-                    tts?.speak(
-                        "Time is up! Great job playing today.",
-                        TextToSpeech.QUEUE_FLUSH,
-                        null,
-                        "time_up"
-                    )
-                }
+                speakAlert("Time is up! Great job playing today.")
 
                 // 強制彈回 MainActivity，將畫面拉離 HDMI 1
                 val lockIntent = Intent(this@TimerService, MainActivity::class.java).apply {
@@ -94,6 +103,28 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
         }.start()
 
         return START_NOT_STICKY
+    }
+
+    private fun speakAlert(message: String) {
+        if (!ttsReady || tts == null) {
+            pendingAlertText = message
+            reinitTts()
+            return
+        }
+        val res = tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "timer_alert")
+        if (res == TextToSpeech.ERROR) {
+            ttsReady = false
+            pendingAlertText = message
+            reinitTts()
+        }
+    }
+
+    private fun reinitTts() {
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (_: Exception) {}
+        tts = TextToSpeech(this, this)
     }
 
     private fun createNotificationChannel() {
@@ -109,8 +140,10 @@ class TimerService : Service(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         countDownTimer?.cancel()
         isRunning = false
-        tts?.stop()
-        tts?.shutdown()
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 
