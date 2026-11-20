@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private lateinit var tts: TextToSpeech
     private var ttsReady = false
+    private var pendingSpeechWord: String? = null
     private val handler = Handler(Looper.getMainLooper())
 
     private var currentQuestion: QuizQuestion? = null
@@ -103,6 +104,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             tts.language = Locale.US
             tts.setSpeechRate(0.88f)
             ttsReady = true
+            pendingSpeechWord?.let { word ->
+                pendingSpeechWord = null
+                tts.speak(word, TextToSpeech.QUEUE_FLUSH, null, "word_tts_retry")
+            }
         }
     }
 
@@ -114,7 +119,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setPadding(56, 28, 56, 28)
         }
 
-        // 1. 頂部標題列
+        // 1. 頂部標題列（含「重啟程式」與「家長選單」）
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -136,20 +141,35 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             textSize = 18f
             setTextColor(Color.parseColor("#FB923C"))
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 24, 0)
+            setPadding(0, 0, 20, 0)
+        }
+
+        val restartAppBtn = Button(this).apply {
+            text = "🔄 重啟程式"
+            textSize = 15f
+            setTextColor(Color.parseColor("#E0F2FE"))
+            background = createFocusableBg("#0F2942", "#0284C7", "#FACC15")
+            setPadding(22, 10, 22, 10)
+            isFocusable = true
+            setOnClickListener { restartApp() }
         }
 
         val parentBtn = Button(this).apply {
             text = "⚙️ 家長選單"
             textSize = 15f
             setTextColor(Color.parseColor("#94A3B8"))
-            background = createFocusableBg("#1E293B", "#334155", "#94A3B8")
-            setPadding(24, 10, 24, 10)
+            background = createFocusableBg("#1E293B", "#334155", "#FACC15")
+            setPadding(22, 10, 22, 10)
+            isFocusable = true
             setOnClickListener { showTvPinDialog("家長控制選單") { showParentMenu() } }
         }
 
         topBar.addView(titleText)
         topBar.addView(comboText)
+        topBar.addView(restartAppBtn, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { rightMargin = 14 })
         topBar.addView(parentBtn)
         rootLayout.addView(topBar)
 
@@ -254,7 +274,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         for (i in 0 until 3) {
             val btn = Button(this).apply {
                 textSize = 28f
-                isAllCaps = false // 保留英文單字正常大小寫
+                isAllCaps = false
                 setTextColor(Color.WHITE)
                 typeface = Typeface.DEFAULT_BOLD
                 background = createFocusableBg("#1E293B", "#2563EB", "#FACC15")
@@ -306,7 +326,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setOnClickListener { handleSettleAndPlay() }
         }
 
-        // 中間留出大段空白距離，避免小孩按結算時誤觸重置
         val spacer = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
         }
@@ -355,7 +374,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val q = currentQuestion ?: return
 
         if (selectedIndex == q.correctIndex) {
-            // 答對！唸出單字加深印象，累積題數 +1
             speakWord(q.correctWord)
             correctCount++
             comboStreak++
@@ -371,7 +389,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 loadNextQuestion()
             }
         } else {
-            // 答錯！啟動 1.5 秒冷卻鎖定防止狂按瞎猜，並播放正確發音提示
             comboStreak = 0
             updateScoreDisplay()
             isCooldown = true
@@ -423,9 +440,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         val displayMinutes = correctCount * MINUTES_PER_QUESTION
-        val actualMinutes = displayMinutes + BUFFER_MINUTES // 偷加 3 分鐘進遊戲連線緩衝
+        val actualMinutes = displayMinutes + BUFFER_MINUTES
 
-        // 結算後立刻將累積歸零（代表點數已兌換使用，時間到被踢回時就是 0 分鐘）
+        // 結算後立刻將累積歸零
         correctCount = 0
         comboStreak = 0
         prefs.edit().putInt("saved_correct_count", 0).apply()
@@ -436,9 +453,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun launchHdmi1WithTimer(displayMinutes: Int, actualMinutes: Int) {
-        if (ttsReady) {
-            tts.speak("Mission complete! Unlocking Switch for $displayMinutes minutes.", TextToSpeech.QUEUE_FLUSH, null, "go")
-        }
+        speakWord("Mission complete! Unlocking Switch for $displayMinutes minutes.")
         Toast.makeText(this, "🚀 結算成功！開放 $displayMinutes 分鐘（含 $BUFFER_MINUTES 分鐘連線緩衝）", Toast.LENGTH_LONG).show()
 
         val serviceIntent = Intent(this, TimerService::class.java).apply {
@@ -458,6 +473,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         loadNextQuestion()
         updateScoreDisplay()
         Toast.makeText(this, "🔄 已重置！新一輪挑戰開始！", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * 徹底冷重啟 APP 與語音引擎（保留已答對的累積題數）
+     */
+    private fun restartApp() {
+        Toast.makeText(this, "🔄 正在重新啟動程式與語音引擎...", Toast.LENGTH_SHORT).show()
+        try {
+            tts.stop()
+            tts.shutdown()
+        } catch (_: Exception) {}
+
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        if (launchIntent != null) {
+            startActivity(launchIntent)
+        }
+        finishAffinity()
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     private fun switchToHdmi1() {
@@ -487,14 +522,28 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun speakWord(word: String) {
-        if (ttsReady) {
-            tts.speak(word, TextToSpeech.QUEUE_FLUSH, null, "word_tts")
+        if (!ttsReady) {
+            pendingSpeechWord = word
+            reinitTts()
+            return
+        }
+        val result = tts.speak(word, TextToSpeech.QUEUE_FLUSH, null, "word_tts")
+        if (result == TextToSpeech.ERROR) {
+            // 若 TTS 引擎因背景閒置過久而斷線，自動重新初始化並補唸
+            ttsReady = false
+            pendingSpeechWord = word
+            reinitTts()
         }
     }
 
-    /**
-     * 專為電視遙控器設計的 0-9 數字密碼輸入視窗（免叫出虛擬鍵盤）
-     */
+    private fun reinitTts() {
+        try {
+            tts.stop()
+            tts.shutdown()
+        } catch (_: Exception) {}
+        tts = TextToSpeech(this, this)
+    }
+
     private fun showTvPinDialog(title: String, onSuccess: () -> Unit) {
         var enteredPin = ""
         val container = LinearLayout(this).apply {
@@ -609,8 +658,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        tts.stop()
-        tts.shutdown()
+        try {
+            tts.stop()
+            tts.shutdown()
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 }
